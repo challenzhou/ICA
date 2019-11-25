@@ -85,6 +85,55 @@ bool whitenImageSet(cv::Mat &imageset, cv::Mat &imagemap, cv::Mat &imagemean,cv:
   return true;
 }
 
+// algorithm from https://en.wikipedia.org/wiki/FastICA
+bool ica(cv::Mat &imageset, cv::Mat &weights, cv::Mat &comps, uint32_t iters)
+{
+  if (imageset.empty() || iters <= 0)
+    return false;
+
+  weights = cv::Mat(imageset.rows, COMPONENT_SIZE, imageset.type());
+  comps = cv::Mat(COMPONENT_SIZE, imageset.cols, imageset.type());
+  cv::randu(basis, cv::Scalar(0.0f), cv::Scalar(255.0f));
+  cv::randu(trans, cv::Scalar(0.0f), cv::Scalar(1.0f));
+  std::cout << "basis Size:"<< basis.size() << std::endl;
+  std::cout << "trans Size:"<< trans.size() << std::endl;
+
+  while (iters-- > 0)
+  {
+    cv::Mat basis_top = imageset*trans.t();
+    cv::Mat basis_bottom = basis*trans*trans.t();
+    basis_bottom = 1.0f/basis_bottom;
+    basis = basis.mul(basis_top);
+    basis = basis.mul(basis_bottom);
+ 
+    cv::Mat trans_top = basis.t()*imageset; 
+    cv::Mat trans_bottom = basis.t()*basis*trans; 
+    trans_bottom = 1.0f/trans_bottom;
+    trans = trans.mul(trans_top);
+    trans = trans.mul(trans_bottom);
+
+    cv::Mat thresh = trans > 0.2f;
+    thresh.convertTo(thresh, CV_8U);
+    cv::normalize(thresh, thresh, 0.0f, 1.0f, cv::NORM_MINMAX);
+    thresh.convertTo(thresh, CV_32F);
+    trans = trans.mul(thresh);
+
+    cv::Mat trans_sum;
+    reduce(trans, trans_sum, 0, cv::REDUCE_SUM, CV_32F);
+    trans_sum = 1.0f/trans_sum;
+
+    cv::Mat trans_regular;
+    for (int i=0; i<trans.cols; i++)
+    {
+   //   trans.col(i) *= trans_sum.at<float>(i);
+    }
+
+  }
+
+  return true;
+}
+
+
 bool nmf(cv::Mat &imageset, cv::Mat &basis, cv::Mat &trans, uint32_t iters)
 {
   if (imageset.empty() || iters <= 0)
@@ -168,48 +217,6 @@ int main(int argc, char* argv[])
   cv::Mat Trans;
   if (!nmf(imageSet, Basis, Trans, ITER_COUNT))
    return -1;
-
-#if 0
-  cv::Mat Basis(imageSet.rows, COMPONENT_SIZE, imageSet.type());
-  cv::Mat Trans(COMPONENT_SIZE, imageSet.cols, imageSet.type());
-  cv::randu(Basis, cv::Scalar(0.0f), cv::Scalar(255.0f));
-  cv::randu(Trans, cv::Scalar(0.0f), cv::Scalar(1.0f));
-  std::cout << "Basis size:"<< Basis.size() << std::endl;
-  std::cout << "Trans size:"<< Trans.size() << std::endl;
-
-  int loop = ITER_COUNT;
-  while (loop-- > 0)
-  {
-    cv::Mat basis_top = imageSet*Trans.t();
-    cv::Mat basis_bottom = Basis*Trans*Trans.t();
-    basis_bottom = 1.0f/basis_bottom;
-    Basis = Basis.mul(basis_top);
-    Basis = Basis.mul(basis_bottom);
- 
-    cv::Mat trans_top = Basis.t()*imageSet; 
-    cv::Mat trans_bottom = Basis.t()*Basis*Trans; 
-    trans_bottom = 1.0f/trans_bottom;
-    Trans = Trans.mul(trans_top);
-    Trans = Trans.mul(trans_bottom);
-
-    cv::Mat thresh = Trans > 0.2f;
-    thresh.convertTo(thresh, CV_8U);
-    cv::normalize(thresh, thresh, 0.0f, 1.0f, cv::NORM_MINMAX);
-    thresh.convertTo(thresh, CV_32F);
-    Trans = Trans.mul(thresh);
-
-    cv::Mat trans_sum;
-    reduce(Trans, trans_sum, 0, cv::REDUCE_SUM, CV_32F);
-    trans_sum = 1.0f/trans_sum;
-
-    cv::Mat trans_regular;
-    for (int i=0; i<Trans.cols; i++)
-    {
-   //   Trans.col(i) *= trans_sum.at<float>(i);
-    }
-
-  }
-#endif
 
   show_subimage("Basis", Basis, imageSize);
 
